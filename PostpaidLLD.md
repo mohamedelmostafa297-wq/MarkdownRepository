@@ -3,7 +3,7 @@
 > **Document Status**: Draft
 > **Author**: System Architect
 > **Type**: Low Level Design (LLD)
-> **Baseline**: Aligned with [Prepaid.md](file:///d:/ReposDOTD/Prepaid.md) standard.
+> **Baseline**: Aligned with `Prepaid.md` standard.
 
 ---
 
@@ -46,33 +46,58 @@ This step orchestrates the initial validation, fetches customer profile from Hua
 
 3.  **Customer Fetch (BSS)**:
     *   Trust BSS data (no local shortcut).
-    *   Map `IdNumber`, `Nationality`, `CRMCustomerId`, [Email](file:///d:/ReposDOTD/RedBullSalesPortalRestSharp/RedBullSalesPortal/RedBullSalesPortal.Web/Modules/SalesAPI/SalesAPIController.cs#100-110).
+    *   Map `IdNumber`, `Nationality`, `CRMCustomerId`, `Email`.
 
 4.  **Determine Subscription**:
     *   Set `IsPostpaid = true`.
     *   Derive `SubType` = Postpaid.
 
 5.  **TCC Eligibility**:
-    *   If `BypassTCC == "0"`, call [CheckEligibility](file:///d:/ReposDOTD/RedBullSalesPortalRestSharp/RedBullSalesPortal/RedBullSalesPortal.Web/Modules/SalesAPI/SalesAPIController.cs#2626-2632).
+    *   If `BypassTCC == "0"`, call `CheckEligibility`.
     *   Log full interaction (`TCC_Eligibility_Log`).
 
-6.  **Create Remote Onboarding Order**:
-    *   Call `POST {{onboarding-redbull}}/api/mobile/v1/createOrder`.
-    *   **Payload Extension**:
-        *   `isPostpaid: true`
-        *   `subType`: Postpaid
-        *   `eligibilityTcn`: from TCC response
-        *   `crmCustomerId`: from BSS
-        *   `status`: "NEW"
+#### Onboarding – Create Order
+
+`POST {{onboarding-redbull}}/api/mobile/v1/createOrder` (newSubscriber flow).
+
+This becomes the single place where we store the “Sales Order” data that we previously persisted in our own SalesOrder table.
+
+> **CRITICAL**: We must extend this API request body to include several important fields (see 1.4).
+
+### 1.3 ValidateIdNew – Detailed Flow (Java)
 
 **Response to Seller App**:
-Standard [ValidateIdNew](file:///d:/ReposDOTD/RedBullSalesPortalRestSharp/RedBullSalesPortal/RedBullSalesPortal.Web/Modules/SalesAPI/SalesAPIController.cs#921-1095) response, but backed by the new Order Management ID.
+Standard `ValidateIdNew` response, but backed by the new Order Management ID.
+
+---
+
+### 1.4 Explicit GAP Statement for createOrder
+
+#### Gap – Onboarding createOrder request body vs required Order data
+In the legacy .NET Sales backend, the `SalesOrder` table stored several critical fields (Seller, KYC, OTP context).
+In the new architecture, the local order is owned by the `ActionOrder` (Order Management), and Onboarding only orchestrates calls.
+
+The existing `{{onboarding-redbull}}/api/mobile/v1/createOrder` request body **does not carry all the fields** that must end up on the order.
+
+> **Requirement**: The new `createOrder` (or subsequent `updateOrder`) must persist the following into the Microservices Ecosystem:
+
+1.  **Customer / KYC fields** (Stored in Customer Management):
+    *   `idNumber`, `idType`, `nationality`
+    *   `firstName`, `lastName`, `crmCustomerId`
+2.  **Subscription / line type** (Stored in Order Management):
+    *   `subType` (Postpaid)
+    *   **`isPostpaid`** (Critical for Billing Trigger)
+3.  **Seller / Partner context**:
+    *   `sellerId`, `partnerId`, `sellerChannel`
+4.  **Order meta**:
+    *   `status` (NEW)
+    *   `orderDate`
 
 ---
 
 ## 2. Step 2 – Number Selection Flow
 
-**Trigger**: After [ValidateIdNew](file:///d:/ReposDOTD/RedBullSalesPortalRestSharp/RedBullSalesPortal/RedBullSalesPortal.Web/Modules/SalesAPI/SalesAPIController.cs#921-1095) completion.
+**Trigger**: After `ValidateIdNew` completion.
 **Endpoint**: `POST /api/Sales/GetMSISDNs`
 
 ### 2.1 Logic Changes
@@ -105,15 +130,15 @@ Standard [ValidateIdNew](file:///d:/ReposDOTD/RedBullSalesPortalRestSharp/RedBul
 **Endpoint**: `POST api/Sales/UpdateOrder`
 
 ### Step A: `basic-info`
-*   **Fields**: `FirstName`, `LastName`, [Email](file:///d:/ReposDOTD/RedBullSalesPortalRestSharp/RedBullSalesPortal/RedBullSalesPortal.Web/Modules/SalesAPI/SalesAPIController.cs#100-110).
+*   **Fields**: `FirstName`, `LastName`, `Email`.
 *   **Action**: Update Customer Profile in `CustomerManagementService`. Set Order Status `InProgress`.
 
 ### Step B: `address-info`
-*   **Fields**: `Lat`, `Lng`, [City](file:///d:/ReposDOTD/RedBullSalesPortalRestSharp/RedBullSalesPortal/RedBullSalesPortal.Web/Modules/Common/Helpers/NafithHelper.cs#65-73), `Address`.
+*   **Fields**: `Lat`, `Lng`, `City`, `Address`.
 *   **Action**: Validate Location. Update Delivery/Service Address.
 
 ### Step C: `select-number`
-*   **Fields**: [MSISDN](file:///d:/ReposDOTD/RedBullSalesPortalRestSharp/RedBullSalesPortal/RedBullSalesPortal.Web/Modules/SalesAPI/SalesAPIController.cs#2983-2999), `IsMNP`, [ExtraSIM](file:///d:/ReposDOTD/RedBullSalesPortalRestSharp/RedBullSalesPortal/RedBullSalesPortal.Web/Modules/SalesAPI/SalesAPIController.cs#2897-2920) (JSON).
+*   **Fields**: `MSISDN`, `IsMNP`, `ExtraSIM` (JSON).
 *   **Actions**:
     1.  **Normalize**: Standardize MSISDN format.
     2.  **Wallet Check**:
@@ -123,7 +148,7 @@ Standard [ValidateIdNew](file:///d:/ReposDOTD/RedBullSalesPortalRestSharp/RedBul
     4.  **Reserve**: Call Inventory `operateMsisdn` to reserve the number.
 
 ### Step D: `select-plan`
-*   **Fields**: `PlanId`, [Addons](file:///d:/ReposDOTD/RedBullSalesPortalRestSharp/RedBullSalesPortal/RedBullSalesPortal.Web/Modules/SalesAPI/SalesAPIController.cs#2458-2498).
+*   **Fields**: `PlanId`, `Addons`.
 *   **Actions**:
     1.  **Validate**: ensure Plan is valid Postpaid plan.
     2.  **Commitment**: Calculate `TotalCommitmentValue` (Plan * Duration + Vanity Price).
@@ -133,7 +158,7 @@ Standard [ValidateIdNew](file:///d:/ReposDOTD/RedBullSalesPortalRestSharp/RedBul
 > **Purpose**: Mandatory Credit Risk check. The user must accept the Promissory Note (Sanad) via Nafith.
 
 **Logic**:
-1.  **Check Status**: Query `credit-check-service` for [SanadStatus](file:///d:/ReposDOTD/RedBullSalesPortalRestSharp/RedBullSalesPortal/RedBullSalesPortal.Web/Modules/Common/Helpers/NafithHelper.cs#154-207) of this Order.
+1.  **Check Status**: Query `credit-check-service` for `SanadStatus` of this Order.
 2.  **If Status == APPROVED**:
     *   Proceed to next step.
 3.  **If Status != APPROVED**:
@@ -168,7 +193,7 @@ Standard [ValidateIdNew](file:///d:/ReposDOTD/RedBullSalesPortalRestSharp/RedBul
 
 | Step | Service | Action | Postpaid Specific? |
 | :--- | :--- | :--- | :--- |
-| **Validate** | [onboarding](file:///d:/ReposDOTD/onboarding) | Create Shell Order | `isPostpaid: true` |
+| **Validate** | `onboarding` | Create Shell Order | `isPostpaid: true` |
 | **Select Number** | `inventory` | Reserve Number | Block Extra SIMs on PortIn |
 | **Select Plan** | `product-catalog` | Get Plan | Return Commitment Metadata |
 | **Sanad** | `credit-check` | **Create/Check Sanad** | **YES (New)** |
