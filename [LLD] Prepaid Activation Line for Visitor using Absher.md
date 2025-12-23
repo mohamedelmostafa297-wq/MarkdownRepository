@@ -64,21 +64,21 @@ The system supports the following visitor ID types:
 
 ### IdType Enum (from SalesOrder.cs)
 ```csharp
-public enum IdType
-{
-    Citizen = 1,
-    Resident = 2,
-    Visitor = 3,
-    GCC_Passport = 4,
-    GCC_National_Id = 5,
-    Pilgrim_Passport = 6,
-    Pilgrim_Border = 7,
-    Umrah_Passport = 8,
-    Visitor_Visa = 9,
-    Umrah_Visa = 10,
-    Haj_Visa = 11,
-    Diplomat = 99
-}
+ public enum IdType 
+ {
+     Citizen = 1,
+     Resident = 2,
+     Visitor = 3,
+     GCC_Passport = 4,
+     GCC_National_Id = 5,
+     Pilgrim_Passport = 6,
+     Pilgrim_Border = 7,
+     Umrah_Passport = 8,
+     Visitor_Visa = 9,
+     Umrah_Visa = 10,
+     Haj_Visa = 11,
+     Diplomat = 99
+ }
 ```
 
 ---
